@@ -9,10 +9,12 @@ const listaPredicciones = {
 
 // Elementos del DOM
 const video = document.getElementById('video');
+const imagenSubida = document.getElementById('imagen-subida');
 const capturarBtn = document.getElementById('capturar');
 const cambiarCamaraBtn = document.getElementById('cambiar-camara');
+const inputImagen = document.getElementById('input-imagen');
 const canvas = document.createElement('canvas');
-let usandoFrontal = true; // Variable para alternar entre cámaras
+let usandoFrontal = true; // Alternar entre cámaras
 let streamActivo = null;  // Almacenar el stream activo
 
 // Cargar el modelo
@@ -20,42 +22,59 @@ async function cargarModelo() {
     return await tf.loadLayersModel('./modelo/model.json');
 }
 
-// Capturar un fotograma del video y convertirlo en imagen para el modelo
-function capturarFotograma() {
-    const contexto = canvas.getContext('2d');
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    contexto.drawImage(video, 0, 0, canvas.width, canvas.height);
-    
-    const img = new Image();
-    img.src = canvas.toDataURL('image/png');
-    img.onload = () => predecir(img); // Pasar la imagen capturada a la función de predicción
-}
-
 // Acceder a la cámara
 async function accederCamara() {
     if (streamActivo) {
-        streamActivo.getTracks().forEach(track => track.stop()); // Detener la cámara anterior
+        streamActivo.getTracks().forEach(track => track.stop()); // Detener cámara anterior
     }
 
     try {
         const dispositivos = await navigator.mediaDevices.enumerateDevices();
         const camaras = dispositivos.filter(device => device.kind === 'videoinput');
         if (camaras.length > 1) {
-            usandoFrontal = !usandoFrontal; // Alternar cámara si hay más de una
+            usandoFrontal = !usandoFrontal; // Alternar entre cámaras si hay más de una
         }
-        
+
         streamActivo = await navigator.mediaDevices.getUserMedia({
             video: { facingMode: usandoFrontal ? "user" : "environment" }
         });
 
         video.srcObject = streamActivo;
+        video.style.display = "block";  // Mostrar video
+        imagenSubida.style.display = "none"; // Ocultar imagen subida
     } catch (error) {
         console.error("Error al acceder a la cámara:", error);
     }
 }
 
-// Preprocesar la imagen para el modelo
+// Capturar un fotograma del video y procesarlo
+function capturarFotograma() {
+    const contexto = canvas.getContext('2d');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    contexto.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    const img = new Image();
+    img.src = canvas.toDataURL('image/png');
+    img.onload = () => predecir(img); // Pasar la imagen capturada a la función de predicción
+}
+
+// Cargar imagen desde archivo
+inputImagen.addEventListener('change', (event) => {
+    const archivo = event.target.files[0];
+    if (archivo) {
+        const img = new Image();
+        img.src = URL.createObjectURL(archivo);
+        img.onload = () => {
+            video.style.display = "none";  // Ocultar video
+            imagenSubida.src = img.src;
+            imagenSubida.style.display = "block";  // Mostrar imagen subida
+            predecir(img);
+        };
+    }
+});
+
+// Preprocesar la imagen antes de la predicción
 async function preprocesarImagen(imagen) {
     const imgTensor = tf.browser.fromPixels(imagen);
     const imgRedimensionada = tf.image.resizeBilinear(imgTensor, [256, 256]);
